@@ -6,13 +6,13 @@
  *   https://yourserver.com/spa-contact-field/index.php
  *
  * This script fires when a new SPA item (entityTypeId = 1054) is created.
- * It reads the custom fields UF_CRM_8_NAME / UF_CRM_8_EMAIL / UF_CRM_8_PHONE,
+ * It reads the custom fields UF_CRM_34_NAME / UF_CRM_34_EMAIL / UF_CRM_34_PHONE, ADDRESS
  * creates a Bitrix Contact from that data, then links the contact back to the
  * SPA item via the contactIds field.
  */
 
 $rest_url = "https://comma.bitrix24.ae/rest/8/pzou62xi93z8dnu3/";
-$spa_entity_type = 1078;
+$spa_entity_type = 1056;
 $log_file = __DIR__ . '/webhook_log.txt';
 
 function writeLog($message, $file)
@@ -88,16 +88,23 @@ if (!$item) {
 writeLog("--- SPA ITEM DATA ---", $log_file);
 writeLog($item, $log_file);
 
-$name = trim($item['ufCrm34Name'] ?? '');
-$email = trim($item['ufCrm34Email'] ?? '');
-$phone = trim($item['ufCrm34Phone'] ?? '');
+// ufCrm26LandlordName
+// ufCrm26LandlordEmail
+// ufCrm26LandlordContact
+// ufCrm26_1774431022842
 
-if ($name === '' && $email === '' && $phone === '') {
-    writeLog("WARNING: SPA item #$item_id has no name/email/phone - skipping contact creation.", $log_file);
+
+$name = trim($item['ufCrm26LandlordName'] ?? '');  // fields
+$email = trim($item['ufCrm26LandlordEmail'] ?? '');
+$phone = trim($item['ufCrm26LandlordContact'] ?? '');
+$address = trim($item['ufCrm26_1774431022842'][0] ?? '');
+
+if ($name === '' && $email === '' && $phone === '' && $address === '') {
+    writeLog("WARNING: SPA item #$item_id has no name/email/phone/address - skipping contact creation.", $log_file);
     exit;
 }
 
-writeLog("INFO: Extracted -> Name: '$name' | Email: '$email' | Phone: '$phone'", $log_file);
+writeLog("INFO: Extracted -> Name: '$name' | Email: '$email' | Phone: '$phone' | Address: '$address' ", $log_file);
 
 $contact_fields = ['NAME' => $name];
 
@@ -107,6 +114,10 @@ if ($email !== '') {
 
 if ($phone !== '') {
     $contact_fields['PHONE'] = [['VALUE' => $phone, 'VALUE_TYPE' => 'WORK']];
+}
+
+if ($address !== '') {
+    $contact_fields['ADDRESS'] = $address;
 }
 
 $contact_response = callBitrix('crm.contact.add', ['fields' => $contact_fields], $rest_url);
