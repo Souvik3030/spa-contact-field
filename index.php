@@ -99,8 +99,8 @@ $email = trim($item['ufCrm26LandlordEmail'] ?? '');
 $phone = trim($item['ufCrm26LandlordContact'] ?? '');
 $address = trim($item['ufCrm26_1774431022842'][0] ?? '');
 
-if ($name === '' && $email === '' && $phone === '' && $address === '') {
-    writeLog("WARNING: SPA item #$item_id has no name/email/phone/address - skipping contact creation.", $log_file);
+if ($name === '' || $email === '' || $phone === '' || $address === '') {
+    writeLog("WARNING: SPA item #$item_id is missing one or more required landlord fields (name/email/phone/address) - skipping contact creation.", $log_file);
     exit;
 }
 
