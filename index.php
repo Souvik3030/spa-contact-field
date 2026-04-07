@@ -11,8 +11,8 @@
  * SPA item via the contactIds field.
  */
 
-$rest_url = "https://test.vortexwebre.com/rest/1/4xmt5rq9imvnzhv4/";
-$spa_entity_type = 1054;
+$rest_url = "https://comma.bitrix24.ae/rest/8/pzou62xi93z8dnu3/";
+$spa_entity_type = 1078;
 $log_file = __DIR__ . '/webhook_log.txt';
 
 function writeLog($message, $file)
@@ -88,9 +88,9 @@ if (!$item) {
 writeLog("--- SPA ITEM DATA ---", $log_file);
 writeLog($item, $log_file);
 
-$name = trim($item['ufCrm8Name'] ?? '');
-$email = trim($item['ufCrm8Email'] ?? '');
-$phone = trim($item['ufCrm8Phone'] ?? '');
+$name = trim($item['ufCrm34Name'] ?? '');
+$email = trim($item['ufCrm34Email'] ?? '');
+$phone = trim($item['ufCrm34Phone'] ?? '');
 
 if ($name === '' && $email === '' && $phone === '') {
     writeLog("WARNING: SPA item #$item_id has no name/email/phone - skipping contact creation.", $log_file);
