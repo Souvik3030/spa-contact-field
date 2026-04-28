@@ -12,7 +12,7 @@
  */
 
 $rest_url = "https://comma.bitrix24.ae/rest/8/pzou62xi93z8dnu3/";
-$spa_entity_type = 1056;
+$spa_entity_type = 1078;
 $log_file = __DIR__ . '/webhook_log.txt';
 
 function writeLog($message, $file)
