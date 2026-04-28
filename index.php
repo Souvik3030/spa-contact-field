@@ -94,10 +94,10 @@ writeLog($item, $log_file);
 // ufCrm26_1774431022842
 
 
-$name = trim($item['ufCrm26LandlordName'] ?? '');  // fields
-$email = trim($item['ufCrm26LandlordEmail'] ?? '');
-$phone = trim($item['ufCrm26LandlordContact'] ?? '');
-$address = trim($item['ufCrm26_1774431022842'][0] ?? '');
+$name = trim($item['ufCrm34Name'] ?? '');  // fields
+$email = trim($item['ufCrm34Email'] ?? '');
+$phone = trim($item['ufCrm34Phone'] ?? '');
+$address = trim($item['ufCrm34_1777367608'][0] ?? '');
 
 if ($name === '' || $email === '' || $phone === '' || $address === '') {
     writeLog("WARNING: SPA item #$item_id is missing one or more required landlord fields (name/email/phone/address) - skipping contact creation.", $log_file);
