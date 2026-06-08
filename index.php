@@ -11,8 +11,8 @@
  * SPA item via the contactIds field.
  */
 
-$rest_url = "https://comma.bitrix24.ae/rest/8/pzou62xi93z8dnu3/";
-$spa_entity_type = 1078;
+$rest_url = "https://test.vortexwebre.com/rest/1/gng7u58v2pl8wpcf/";
+$spa_entity_type = 1054;
 $log_file = __DIR__ . '/webhook_log.txt';
 
 function writeLog($message, $file)
@@ -94,10 +94,10 @@ writeLog($item, $log_file);
 // ufCrm26_1774431022842
 
 
-$name = trim($item['ufCrm34Name'] ?? '');  // fields
-$email = trim($item['ufCrm34Email'] ?? '');
-$phone = trim($item['ufCrm34Phone'] ?? '');
-$address = trim($item['ufCrm34_1777367608'][0] ?? '');
+$name = trim($item['ufCrm8Name'] ?? '');  // fields
+$email = trim($item['ufCrm8Email'] ?? '');
+$phone = trim($item['ufCrm8Phone'] ?? '');
+$address = trim($item['ufCrm8_1777367608'][0] ?? '');
 
 if ($name === '' || $email === '' || $phone === '' || $address === '') {
     writeLog("WARNING: SPA item #$item_id is missing one or more required landlord fields (name/email/phone/address) - skipping contact creation.", $log_file);
