@@ -11,8 +11,8 @@
  */
 
 // 1. Configuration
-$rest_url = "https://test.vortexwebre.com/rest/1/gng7u58v2pl8wpcf/";
-$spa_entity_type = 1054;
+$rest_url = "https://b24-nu589s.bitrix24.in/rest/15/41lxgk5s16sqov1f/";
+$spa_entity_type = 1038;
 $web_logs = [];
 $log_file = __DIR__ . '/webhook_log.txt'; // Path to save your logs on the server
 
@@ -190,9 +190,9 @@ writeValue("Item data", $item);
 
 // 6. Extracted fields with flexible mappings
 writeSection("EXTRACT CONTACT FIELDS");
-$name  = trim($item['ufCrm8Name']  ?? $item['ufCrm26LandlordName']  ?? '');
-$email = trim($item['ufCrm8Email'] ?? $item['ufCrm26LandlordEmail'] ?? '');
-$phone = trim($item['ufCrm8Phone'] ?? $item['ufCrm26LandlordContact'] ?? '');
+$name  = trim($item['ufCrm7Name']  ?? $item['ufCrm26LandlordName']  ?? '');
+$email = trim($item['ufCrm7Email'] ?? $item['ufCrm26LandlordEmail'] ?? '');
+$phone = trim($item['ufCrm7Phone'] ?? $item['ufCrm26LandlordContact'] ?? '');
 
 writeValue("Name", $name);
 writeValue("Email", $email);
