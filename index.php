@@ -5,14 +5,14 @@
  * Handler URL:
  * https://yourserver.com/spa-contact-field/index.php
  *
- * This script fires when a new SPA item (entityTypeId = 1054) is created.
+ * This script fires when a new SPA item (entityTypeId = 1056) is created.
  * It reads the custom fields, creates a Bitrix Contact from that data, 
  * then links the contact back to the SPA item via the contactIds field.
  */
 
 // 1. Configuration
-$rest_url = "https://b24-nu589s.bitrix24.in/rest/15/41lxgk5s16sqov1f/";
-$spa_entity_type = 1038;
+$rest_url = "https://comma.bitrix24.ae/rest/8/zr9bak2vke6ugubq/";
+$spa_entity_type = 1056;
 $web_logs = [];
 $log_file = __DIR__ . '/webhook_log.txt'; // Path to save your logs on the server
 
@@ -188,11 +188,11 @@ if (!$item) {
 writeSection("SPA ITEM DATA");
 writeValue("Item data", $item);
 
-// 6. Extracted fields with flexible mappings
+// 6. Extracted fields (Configured exclusively for ufCrm26 group)
 writeSection("EXTRACT CONTACT FIELDS");
-$name  = trim($item['ufCrm7Name']  ?? $item['ufCrm26LandlordName']  ?? '');
-$email = trim($item['ufCrm7Email'] ?? $item['ufCrm26LandlordEmail'] ?? '');
-$phone = trim($item['ufCrm7Phone'] ?? $item['ufCrm26LandlordContact'] ?? '');
+$name  = trim($item['ufCrm26LandlordName']  ?? '');
+$email = trim($item['ufCrm26LandlordEmail'] ?? '');
+$phone = trim($item['ufCrm26LandlordContact'] ?? '');
 
 writeValue("Name", $name);
 writeValue("Email", $email);
