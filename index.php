@@ -24,6 +24,56 @@ function writeLog($message)
     $web_logs[] = "[$timestamp] " . (is_array($message) ? print_r($message, true) : $message);
 }
 
+function writeSection($title)
+{
+    writeLog("");
+    writeLog("========== $title ==========");
+}
+
+function sanitizeForLog($value)
+{
+    if (!is_array($value)) {
+        return $value;
+    }
+
+    $sensitive_keys = ['access_token', 'refresh_token', 'application_token', 'auth', 'password', 'token'];
+
+    foreach ($value as $key => $item) {
+        $lower_key = strtolower((string) $key);
+        if (in_array($lower_key, $sensitive_keys, true) || strpos($lower_key, 'token') !== false) {
+            $value[$key] = '*** hidden ***';
+            continue;
+        }
+
+        $value[$key] = sanitizeForLog($item);
+    }
+
+    return $value;
+}
+
+function writeValue($label, $value)
+{
+    $value = sanitizeForLog($value);
+    writeLog($label . ': ' . (is_array($value) ? print_r($value, true) : $value));
+}
+
+function getRequestHeadersForLog()
+{
+    if (function_exists('getallheaders')) {
+        return getallheaders();
+    }
+
+    $headers = [];
+    foreach ($_SERVER as $key => $value) {
+        if (strpos($key, 'HTTP_') === 0) {
+            $header = str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($key, 5)))));
+            $headers[$header] = $value;
+        }
+    }
+
+    return $headers;
+}
+
 function finishWebhook()
 {
     global $web_logs, $log_file;
@@ -44,6 +94,9 @@ function finishWebhook()
 // 3. API Communication Function
 function callBitrix($method, $params, $url)
 {
+    writeSection("BITRIX API CALL: $method");
+    writeValue("Request params", $params);
+
     $queryUrl = $url . $method . ".json";
     $queryData = http_build_query($params);
     $options = [
@@ -58,17 +111,34 @@ function callBitrix($method, $params, $url)
     $result = @file_get_contents($queryUrl, false, $context);
 
     if ($result === false) {
+        writeLog("Bitrix response: HTTP_REQUEST_FAILED");
         return ['error' => 'HTTP_REQUEST_FAILED'];
     }
 
-    return json_decode($result, true);
+    $decoded_result = json_decode($result, true);
+    writeValue("Bitrix raw response", $result);
+    writeValue("Bitrix decoded response", $decoded_result);
+
+    return $decoded_result;
 }
 
 // 4. Processing Incoming Webhook
-writeLog("=== INCOMING WEBHOOK POST DATA ===");
-writeLog($_POST);
+writeSection("WEBHOOK HIT");
+writeValue("Request time", date("Y-m-d H:i:s"));
+writeValue("Request method", $_SERVER['REQUEST_METHOD'] ?? '');
+writeValue("Remote IP", $_SERVER['REMOTE_ADDR'] ?? '');
+writeValue("User agent", $_SERVER['HTTP_USER_AGENT'] ?? '');
+
+writeSection("INCOMING EVENT DATA");
+writeValue("Event name", $_POST['event'] ?? $_REQUEST['event'] ?? 'NO_EVENT_NAME_RECEIVED');
+writeValue("POST data", $_POST);
+writeValue("GET data", $_GET);
+writeValue("REQUEST data", $_REQUEST);
+writeValue("Raw body", file_get_contents('php://input'));
+writeValue("Headers", getRequestHeadersForLog());
 
 // Resolve webhook source entity type
+writeSection("RESOLVE EVENT TYPE");
 $raw_type = $_POST['data']['TYPE'] ?? '';
 $raw_entity_id = $_POST['data']['FIELDS']['ENTITY_TYPE_ID'] ?? null;
 $entity_type = strtoupper((string) $raw_type);
@@ -83,7 +153,11 @@ if ($entity_type !== '') {
 $item_id = $_POST['data']['FIELDS']['ID'] ?? null;
 $expected_type = 'DYNAMIC_' . $spa_entity_type;
 
-writeLog("INFO: Resolved webhook item type as '$resolved_type'.");
+writeValue("Raw TYPE", $raw_type);
+writeValue("Raw ENTITY_TYPE_ID", $raw_entity_id);
+writeValue("Resolved type", $resolved_type);
+writeValue("Expected type", $expected_type);
+writeValue("Item ID", $item_id);
 
 if ($resolved_type !== $expected_type) {
     writeLog("INFO: Skipping - type '$resolved_type' is not our SPA ($expected_type).");
@@ -98,6 +172,7 @@ if (!$item_id) {
 writeLog("INFO: Processing SPA item #$item_id (entityTypeId=$spa_entity_type).");
 
 // 5. Fetch Original SPA Item Details
+writeSection("FETCH SPA ITEM");
 $item_response = callBitrix('crm.item.get', [
     'entityTypeId' => $spa_entity_type,
     'id' => $item_id,
@@ -110,22 +185,28 @@ if (!$item) {
     finishWebhook();
 }
 
-writeLog("--- SPA ITEM DATA ---");
-writeLog($item);
+writeSection("SPA ITEM DATA");
+writeValue("Item data", $item);
 
 // 6. Extracted fields with flexible mappings
+writeSection("EXTRACT CONTACT FIELDS");
 $name  = trim($item['ufCrm8Name']  ?? $item['ufCrm26LandlordName']  ?? '');
 $email = trim($item['ufCrm8Email'] ?? $item['ufCrm26LandlordEmail'] ?? '');
 $phone = trim($item['ufCrm8Phone'] ?? $item['ufCrm26LandlordContact'] ?? '');
+
+writeValue("Name", $name);
+writeValue("Email", $email);
+writeValue("Phone", $phone);
 
 if ($name === '' || $email === '' || $phone === '') {
     writeLog("WARNING: SPA item #$item_id missing required fields (name/email/phone) - skipping contact creation.");
     finishWebhook();
 }
 
-writeLog("INFO: Extracted -> Name: '$name' | Email: '$email' | Phone: '$phone' ");
+writeLog("INFO: Required contact fields found.");
 
 // 7. Structure Contact Fields
+writeSection("BUILD CONTACT PAYLOAD");
 $contact_fields = ['NAME' => $name];
 
 if ($email !== '') {
@@ -136,9 +217,14 @@ if ($phone !== '') {
     $contact_fields['PHONE'] = [['VALUE' => $phone, 'VALUE_TYPE' => 'WORK']];
 }
 
+writeValue("Contact payload", $contact_fields);
+
 // 8. Create the New Contact
+writeSection("CREATE CONTACT");
 $contact_response = callBitrix('crm.contact.add', ['fields' => $contact_fields], $rest_url);
 $new_contact_id = $contact_response['result'] ?? null;
+
+writeValue("New contact ID", $new_contact_id);
 
 if (!$new_contact_id) {
     writeLog("FAILED: Could not create contact for SPA item #$item_id - " . print_r($contact_response, true));
@@ -148,11 +234,14 @@ if (!$new_contact_id) {
 writeLog("SUCCESS: Contact #$new_contact_id created.");
 
 // 9. Prepare Associated Contact Array
+writeSection("CHECK EXISTING CONTACT LINKS");
 $existing_contact_ids = $item['contactIds'] ?? [];
 if (!is_array($existing_contact_ids)) {
     $existing_contact_ids = [];
 }
 $existing_contact_ids = array_map('intval', $existing_contact_ids);
+
+writeValue("Existing contact IDs", $existing_contact_ids);
 
 // CRITICAL LOOP CONTROL: 
 // If contact is already attached, exit to prevent an infinite webhook loop during updates.
@@ -167,7 +256,10 @@ $updated_contact_ids = array_values(array_unique(array_merge(
     [(int) $new_contact_id]
 )));
 
+writeValue("Updated contact IDs", $updated_contact_ids);
+
 // 10. Link Contact back to SPA Item
+writeSection("UPDATE SPA CONTACT LINKS");
 $update_response = callBitrix('crm.item.update', [
     'entityTypeId' => $spa_entity_type,
     'id' => $item_id,
