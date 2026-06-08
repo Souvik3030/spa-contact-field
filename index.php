@@ -3,35 +3,45 @@
  * OUTBOUND webhook: CRM item add / dynamic item add (Scope: crm)
  *
  * Handler URL:
- *   https://yourserver.com/spa-contact-field/index.php
+ * https://yourserver.com/spa-contact-field/index.php
  *
  * This script fires when a new SPA item (entityTypeId = 1054) is created.
- * It reads the custom fields UF_CRM_34_NAME / UF_CRM_34_EMAIL / UF_CRM_34_PHONE
- * creates a Bitrix Contact from that data, then links the contact back to the
- * SPA item via the contactIds field.
+ * It reads the custom fields, creates a Bitrix Contact from that data, 
+ * then links the contact back to the SPA item via the contactIds field.
  */
 
+// 1. Configuration
 $rest_url = "https://test.vortexwebre.com/rest/1/gng7u58v2pl8wpcf/";
 $spa_entity_type = 1054;
 $web_logs = [];
+$log_file = __DIR__ . '/webhook_log.txt'; // Path to save your logs on the server
 
+// 2. Logging Functions
 function writeLog($message)
 {
     global $web_logs;
-
     $timestamp = date("Y-m-d H:i:s");
     $web_logs[] = "[$timestamp] " . (is_array($message) ? print_r($message, true) : $message);
 }
 
 function finishWebhook()
 {
-    global $web_logs;
+    global $web_logs, $log_file;
 
+    $log_content = "=== WEBHOOK EXECUTION START ===" . PHP_EOL;
+    $log_content .= implode(PHP_EOL, $web_logs) . PHP_EOL;
+    $log_content .= "=== WEBHOOK EXECUTION END ===" . PHP_EOL . PHP_EOL;
+    
+    // Save to file so you can check logs later
+    @file_put_contents($log_file, $log_content, FILE_APPEND);
+
+    // Also output to screen in case of manual browser testing
     header('Content-Type: text/plain; charset=utf-8');
-    echo implode(PHP_EOL, $web_logs) . PHP_EOL;
+    echo $log_content;
     exit;
 }
 
+// 3. API Communication Function
 function callBitrix($method, $params, $url)
 {
     $queryUrl = $url . $method . ".json";
@@ -45,16 +55,20 @@ function callBitrix($method, $params, $url)
     ];
 
     $context = stream_context_create($options);
-    $result = file_get_contents($queryUrl, false, $context);
+    $result = @file_get_contents($queryUrl, false, $context);
+
+    if ($result === false) {
+        return ['error' => 'HTTP_REQUEST_FAILED'];
+    }
 
     return json_decode($result, true);
 }
 
+// 4. Processing Incoming Webhook
 writeLog("=== INCOMING WEBHOOK POST DATA ===");
 writeLog($_POST);
 
-// Some Bitrix events send data[TYPE] = DYNAMIC_1054, while
-// ONCRMDYNAMICITEMADD sends data[FIELDS][ENTITY_TYPE_ID] = 1054.
+// Resolve webhook source entity type
 $raw_type = $_POST['data']['TYPE'] ?? '';
 $raw_entity_id = $_POST['data']['FIELDS']['ENTITY_TYPE_ID'] ?? null;
 $entity_type = strtoupper((string) $raw_type);
@@ -81,8 +95,9 @@ if (!$item_id) {
     finishWebhook();
 }
 
-writeLog("INFO: Processing new SPA item #$item_id (entityTypeId=$spa_entity_type).");
+writeLog("INFO: Processing SPA item #$item_id (entityTypeId=$spa_entity_type).");
 
+// 5. Fetch Original SPA Item Details
 $item_response = callBitrix('crm.item.get', [
     'entityTypeId' => $spa_entity_type,
     'id' => $item_id,
@@ -98,23 +113,19 @@ if (!$item) {
 writeLog("--- SPA ITEM DATA ---");
 writeLog($item);
 
-// ufCrm26LandlordName
-// ufCrm26LandlordEmail
-// ufCrm26LandlordContact
-// ufCrm26_1774431022842
-
-
-$name = trim($item['ufCrm8Name'] ?? '');  // fields
-$email = trim($item['ufCrm8Email'] ?? '');
-$phone = trim($item['ufCrm8Phone'] ?? '');
+// 6. Extracted fields with flexible mappings
+$name  = trim($item['ufCrm8Name']  ?? $item['ufCrm26LandlordName']  ?? '');
+$email = trim($item['ufCrm8Email'] ?? $item['ufCrm26LandlordEmail'] ?? '');
+$phone = trim($item['ufCrm8Phone'] ?? $item['ufCrm26LandlordContact'] ?? '');
 
 if ($name === '' || $email === '' || $phone === '') {
-    writeLog("WARNING: SPA item #$item_id is missing one or more required landlord fields (name/email/phone) - skipping contact creation.");
+    writeLog("WARNING: SPA item #$item_id missing required fields (name/email/phone) - skipping contact creation.");
     finishWebhook();
 }
 
 writeLog("INFO: Extracted -> Name: '$name' | Email: '$email' | Phone: '$phone' ");
 
+// 7. Structure Contact Fields
 $contact_fields = ['NAME' => $name];
 
 if ($email !== '') {
@@ -125,6 +136,7 @@ if ($phone !== '') {
     $contact_fields['PHONE'] = [['VALUE' => $phone, 'VALUE_TYPE' => 'WORK']];
 }
 
+// 8. Create the New Contact
 $contact_response = callBitrix('crm.contact.add', ['fields' => $contact_fields], $rest_url);
 $new_contact_id = $contact_response['result'] ?? null;
 
@@ -135,16 +147,27 @@ if (!$new_contact_id) {
 
 writeLog("SUCCESS: Contact #$new_contact_id created.");
 
+// 9. Prepare Associated Contact Array
 $existing_contact_ids = $item['contactIds'] ?? [];
 if (!is_array($existing_contact_ids)) {
     $existing_contact_ids = [];
 }
+$existing_contact_ids = array_map('intval', $existing_contact_ids);
 
+// CRITICAL LOOP CONTROL: 
+// If contact is already attached, exit to prevent an infinite webhook loop during updates.
+if (in_array((int)$new_contact_id, $existing_contact_ids, true)) {
+    writeLog("INFO: Contact #$new_contact_id is already linked to item #$item_id. Terminating to avoid recursion loops.");
+    finishWebhook();
+}
+
+// Merge new contact cleanly
 $updated_contact_ids = array_values(array_unique(array_merge(
-    array_map('intval', $existing_contact_ids),
+    $existing_contact_ids,
     [(int) $new_contact_id]
 )));
 
+// 10. Link Contact back to SPA Item
 $update_response = callBitrix('crm.item.update', [
     'entityTypeId' => $spa_entity_type,
     'id' => $item_id,
@@ -156,7 +179,7 @@ $update_response = callBitrix('crm.item.update', [
 if (!empty($update_response['result']['item'])) {
     writeLog("SUCCESS: SPA item #$item_id contactIds updated to " . json_encode($updated_contact_ids) . ".");
 } else {
-    writeLog("WARNING: Update response for SPA item #$item_id - " . print_r($update_response, true));
+    writeLog("WARNING: Update response failed for SPA item #$item_id - " . print_r($update_response, true));
 }
 
 finishWebhook();
